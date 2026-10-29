@@ -44,8 +44,8 @@ public class MainActivity extends Activity {
 
     private final DownloadItem[] downloads = new DownloadItem[] {
         new DownloadItem("chess.js", "https://cdn.jsdelivr.net/npm/chess.js@1.4.0/dist/esm/chess.js"),
-        new DownloadItem("stockfish-19-lite-single.js", "https://cdn.jsdelivr.net/npm/stockfish@19.0.1/bin/stockfish-19-lite-single.js"),
-        new DownloadItem("stockfish-19-lite-single.wasm", "https://cdn.jsdelivr.net/npm/stockfish@19.0.1/bin/stockfish-19-lite-single.wasm")
+        new DownloadItem("stockfish-19-lite-single.js", "https://unpkg.com/stockfish@19.0.1/bin/stockfish-19-lite-single.js"),
+        new DownloadItem("stockfish-19-lite-single.wasm", "https://unpkg.com/stockfish@19.0.1/bin/stockfish-19-lite-single.wasm")
     };
 
     @Override public void onCreate(Bundle savedInstanceState) {
