@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#151b17">
+<meta name="description" content="Шахматный тренер с анализом Stockfish. После первоначальной загрузки работает без интернета.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<title>Chess Coach — твой шахматный тренер</title>
+<style>
+:root{--bg:#101411;--panel:#1a211d;--panel2:#222b25;--text:#eef5ef;--muted:#a9b7ac;--accent:#83c986;--border:#344238;--light:#e8e2d0;--dark:#76966f;--danger:#ff8b8b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:20px max(16px,calc((100% - 1180px)/2));border-bottom:1px solid var(--border);background:#151b17}
+.brand{font-weight:800;font-size:22px;letter-spacing:.3px}.brand span{color:var(--accent)}header p{margin:4px 0 0;color:var(--muted)}
+main{max-width:1180px;margin:auto;padding:20px 16px 40px}.layout{display:grid;grid-template-columns:minmax(300px,620px) minmax(280px,1fr);gap:18px}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;min-width:0}.panel h2{font-size:17px;margin:0 0 12px}
+.board-wrap{width:100%;max-width:600px;margin:auto}.board{display:grid;grid-template-columns:repeat(8,1fr);aspect-ratio:1;border:4px solid #26352a;border-radius:5px;overflow:hidden;user-select:none}
+.square{display:flex;align-items:center;justify-content:center;aspect-ratio:1;font-size:clamp(25px,5.7vw,54px);cursor:pointer;position:relative}
+.light{background:var(--light);color:#151a16}.dark{background:var(--dark);color:#151a16}.selected{box-shadow:inset 0 0 0 5px #f4d35e}.target:after{content:"";width:23%;height:23%;border-radius:50%;background:#223d2d66;position:absolute}.last{background:#c5c85b}
+.piece{filter:drop-shadow(0 1px 1px #0005);line-height:1}.coordinates{display:flex;justify-content:space-between;color:var(--muted);font-size:12px;margin:6px 3px}
+.controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}.btn{border:1px solid var(--border);background:var(--panel2);color:var(--text);padding:9px 12px;border-radius:9px;cursor:pointer;font-weight:650}.btn:hover{border-color:var(--accent)}.primary{background:var(--accent);color:#102012;border-color:var(--accent)}button:disabled{opacity:.4;cursor:not-allowed}
+.moves{max-height:210px;overflow:auto;display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}.move{background:var(--panel2);border:1px solid transparent;color:var(--text);padding:5px 8px;border-radius:6px;cursor:pointer}.move.active{border-color:var(--accent);background:#304634}
+textarea,input{width:100%;background:#101612;color:var(--text);border:1px solid var(--border);border-radius:9px;padding:11px;font:inherit}textarea{min-height:145px;resize:vertical}.field{margin-bottom:10px}.muted{color:var(--muted)}.status{font-size:13px;color:var(--muted);margin-top:8px}.coach{background:#151d17;border:1px solid var(--border);border-radius:10px;padding:13px;margin-top:10px;white-space:pre-wrap}.coach strong{color:var(--accent)}.tag{display:inline-block;font-size:12px;padding:3px 7px;border-radius:20px;background:#2b3b2e;color:#bde8c0;margin-bottom:7px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}.engine-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}.engine-row select{width:auto;min-width:100px}.engine-result{background:#101612;border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:10px}.engine-result b{color:var(--accent)}.stat{padding:12px;background:var(--panel2);border-radius:10px}.stat b{display:block;font-size:20px}.stat small{color:var(--muted)}
+details{margin-top:12px}summary{cursor:pointer;color:var(--accent)}.footer{color:var(--muted);font-size:12px;margin-top:16px}
+@media(max-width:850px){.layout{grid-template-columns:1fr}.square{font-size:clamp(27px,9vw,56px)}main{padding-top:12px}.panel{padding:12px}}
+</style>
+</head>
+<body>
+<header><div class="brand">♟ CHESS <span>COACH</span></div><p>Разбор партий и тренировка на собственных ошибках</p></header>
+<main>
+<div class="layout">
+<section class="panel">
+<h2>Шахматная доска</h2>
+<div class="board-wrap"><div id="board" class="board" aria-label="Шахматная доска"></div><div class="coordinates"><span id="turnLabel">Ход белых</span><span id="plyLabel">Позиция 0</span></div></div>
+<div class="controls">
+<button class="btn" id="startBtn">⏮ В начало</button><button class="btn" id="prevBtn">← Назад</button><button class="btn" id="nextBtn">Вперёд →</button><button class="btn" id="endBtn">В конец ⏭</button>
+<button class="btn" id="flipBtn">Перевернуть</button>
+</div>
+<div id="moves" class="moves"></div>
+<div id="boardStatus" class="status">Вставь PGN справа или сделай ход на доске.</div>
+</section>
+<aside>
+<section class="panel">
+<h2>Загрузить партию</h2>
+<div class="field"><textarea id="pgn" spellcheck="false" placeholder='Вставь сюда PGN с Chess.com…&#10;&#10;Например:&#10;[White "zakonpop"]&#10;[Black "opponent"]&#10;[Result "1-0"]&#10;&#10;1. e4 e5 2. Nf3 Nc6 3. Bc4'></textarea></div>
+<div class="controls"><button class="btn primary" id="loadBtn">Загрузить PGN</button><button class="btn" id="sampleBtn">Пример партии</button><label class="btn" for="fileInput">Выбрать .pgn файл</label><input id="fileInput" type="file" accept=".pgn,.txt" hidden></div>
+<div id="loadStatus" class="status">Поддерживается текст PGN и файлы .pgn.</div>
+</section>
+<section class="panel" style="margin-top:16px">
+<h2>Тренер</h2>
+<div class="grid2"><div class="stat"><b id="moveCount">0</b><small>полуходов</small></div><div class="stat"><b id="gameResult">—</b><small>результат PGN</small></div></div>
+<div class="coach" id="coach"><strong>Начнём разбор</strong><br>Загрузи партию и переключай ходы. Я объясню базовые угрозы и типичные ошибки. Для точной оценки позиции нужен шахматный движок Stockfish.</div>
+<div class="controls"><button class="btn primary" id="coachBtn">Объяснить текущую позицию</button><button class="btn" id="exerciseBtn">Задать вопрос</button></div>
+<div class="engine-row"><button class="btn primary" id="analyzeBtn">♟ Анализ Stockfish</button><button class="btn" id="reviewBtn">🔎 Разобрать всю партию</button><label class="muted" for="depthSelect">Глубина:</label><select id="depthSelect"><option value="8">8 — быстро</option><option value="10" selected>10 — обычно</option><option value="12">12 — дольше</option></select></div>
+<div id="engineStatus" class="status">Stockfish и шахматная логика загружаются при первом запуске приложения и затем доступны офлайн.</div><div id="engineResult" class="engine-result" hidden></div><div id="reviewResult" class="engine-result" hidden aria-live="polite"></div>
+<div id="exercise" class="coach" hidden></div>
+<details><summary>Что умеет эта версия?</summary><p class="muted">Загрузка PGN, навигация по ходам, интерактивная доска, базовые подсказки и анализ Stockfish. Это не облачный ИИ; анализ выполняется локально на устройстве.</p><p class="muted">В Android-приложении ресурсы скачиваются один раз и сохраняются в памяти приложения. После этого доска, PGN и Stockfish работают без интернета. Интернет нужен для первой загрузки ресурсов и будущих обновлений.</p></details>
+<div class="footer">Локальный прототип: партия обрабатывается в браузере. Не вводи пароли Chess.com или API-ключи в это поле.</div>
+</section>
+</aside>
+</div>
+</main>
+<script type="module">
+import { Chess } from './chess.js';
+
+const chess = new Chess();
+const $ = id => document.getElementById(id);
+const files = ['a','b','c','d','e','f','g','h'];
+const glyph = {wk:'♔',wq:'♕',wr:'♖',wb:'♗',wn:'♘',wp:'♙',bk:'♚',bq:'♛',br:'♜',bb:'♝',bn:'♞',bp:'♟'};
+let positions = [new Chess().fen()], sanMoves = [], current = 0, flipped = false, selected = null, legalTargets = [], lastMove = null, headers = {};
+const sample = `[Event "Training example"]\n[White "zakonpop"]\n[Black "opponent"]\n[Result "*"]\n\n1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. d3 Bc5 5. O-O d6 *`;
+
+function parseHeaders(pgn){const h={}; for(const m of pgn.matchAll(/^\[(\w+)\s+"([^"]*)"\]/gm)) h[m[1]]=m[2]; return h;}
+function loadPgn(text){
+	try{
+		const temp = new Chess();
+		const ok = temp.loadPgn(text, {strict:false});
+		if(ok === false) throw new Error('Не удалось прочитать PGN. Проверь формат и ходы.');
+		const hist = temp.history({verbose:true});
+		chess.reset();
+		positions=[chess.fen()]; sanMoves=[]; current=0; lastMove=null; selected=null; legalTargets=[];
+		for(const m of hist){ const played=chess.move(m); if(!played) throw new Error('Ошибка при чтении хода '+m.san); sanMoves.push(played.san); positions.push(chess.fen()); }
+		chess.load(positions[0]);
+		headers=parseHeaders(text);
+		$('moveCount').textContent=sanMoves.length;
+		$('gameResult').textContent=headers.Result || (text.trim().endsWith('1-0')?'1-0':text.trim().endsWith('0-1')?'0-1':text.trim().endsWith('1/2-1/2')?'½-½':'*');
+		$('loadStatus').textContent=`Загружено ходов: ${sanMoves.length}. ${headers.White||'Белые'} — ${headers.Black||'Чёрные'}.`;
+		$('boardStatus').textContent='Партия загружена. Выбирай ход в списке или листай кнопками.';
+		$('exercise').hidden=true;
+		renderMoves(); renderBoard(); explain();
+	}catch(e){$('loadStatus').textContent='Ошибка: '+e.message;}
+}
+function sqName(file,rank){return files[file]+(rank+1);}
+function renderBoard(){
+	const board=$('board'); board.innerHTML='';
+	const game=new Chess(positions[current]);
+	const boardObj=game.board();
+	for(let r=0;r<8;r++) for(let f=0;f<8;f++){
+		const rank=flipped?r:7-r, file=flipped?7-f:f, piece=boardObj[rank][file];
+		const sq=sqName(file,rank), el=document.createElement('button');
+		el.className='square '+((rank+file)%2===0?'light':'dark');
+		el.dataset.square=sq; el.setAttribute('aria-label',sq);
+		if(lastMove && (lastMove.from===sq||lastMove.to===sq)) el.classList.add('last');
+		if(selected===sq) el.classList.add('selected');
+		if(legalTargets.includes(sq)) el.classList.add('target');
+		if(piece){el.innerHTML=`<span class="piece">${glyph[piece.color+piece.type]}</span>`;}
+		el.addEventListener('click',()=>clickSquare(sq));
+		board.appendChild(el);
+	}
+	$('turnLabel').textContent=game.turn()==='w'?'Ход белых':'Ход чёрных';
+	$('plyLabel').textContent=`Полуход ${current} / ${sanMoves.length}`;
+	$('prevBtn').disabled=current===0; $('startBtn').disabled=current===0;
+	$('nextBtn').disabled=current===sanMoves.length; $('endBtn').disabled=current===sanMoves.length;
+}
+function renderMoves(){
+	const box=$('moves');box.innerHTML='';
+	for(let i=0;i<sanMoves.length;i++){
+		if(i%2===0){const n=document.createElement('span');n.className='muted';n.style.padding='5px 2px';n.textContent=(i/2+1)+'.';box.appendChild(n);}
+		const b=document.createElement('button');b.className='move'+(current===i+1?' active':'');b.textContent=sanMoves[i];b.onclick=()=>go(i+1);box.appendChild(b);
+	}
+}
+function go(n){current=Math.max(0,Math.min(sanMoves.length,n));chess.load(positions[current]);selected=null;legalTargets=[];lastMove=null;if(current>0){const g=new Chess(positions[current-1]);const move= g.moves({verbose:true}).find(m=>m.san===sanMoves[current-1]);if(move)lastMove=move;}renderBoard();renderMoves();explain();$('exercise').hidden=true;}
+function clickSquare(sq){
+	const game=new Chess(positions[current]);
+	if(current!==sanMoves.length){$('boardStatus').textContent='Для игры с текущей позиции сначала перейди в конец партии.';return;}
+	if(!selected){const p=game.get(sq);if(!p||p.color!==game.turn())return;selected=sq;legalTargets=game.moves({square:sq,verbose:true}).map(m=>m.to);renderBoard();return;}
+	const candidates=game.moves({square:selected,verbose:true}).filter(m=>m.to===sq);
+	if(candidates.length){
+		let chosen=candidates.find(m=>m.promotion==='q')||candidates[0];
+		try{const m=game.move({from:selected,to:sq,promotion:chosen.promotion||'q'});sanMoves.push(m.san);positions.push(game.fen());current=sanMoves.length;chess.load(game.fen());lastMove=m;$('moveCount').textContent=sanMoves.length;renderMoves();selected=null;legalTargets=[];renderBoard();explain();return;}catch(e){}
+	}
+	const p=game.get(sq);selected=p&&p.color===game.turn()?sq:null;legalTargets=selected?game.moves({square:selected,verbose:true}).map(m=>m.to):[];renderBoard();
+}
+function explain(){
+	const game=new Chess(positions[current]);
+	let text='';
+	if(game.isCheckmate()) text='Мат! Партия завершена.';
+	else if(game.isCheck()) text='Король под шахом. Сначала найди способ убрать шах: уйти королём, закрыться или взять атакующую фигуру.';
+	else if(game.isDraw()) text='Позиция ничейная по правилам шахмат.';
+	else if(current===0) text='Начальная позиция. В дебюте борись за центр, развивай коней и слонов и вовремя рокируйся.';
+	else{
+		const prev=new Chess(positions[current-1]);
+		const m=prev.moves({verbose:true}).find(x=>x.san===sanMoves[current-1]);
+		const side=m?.color==='w'?'Белые':'Чёрные';
+		text=`Последний ход: ${side} сыграли ${sanMoves[current-1]}. `;
+		if(m?.captured) text+=`Ход забрал ${pieceName(m.captured)}. `;
+		if(m?.san?.includes('+')) text+='Создан шах — проверь, какие ответы есть у короля. ';
+		if(m?.san?.includes('#')) text+='Это мат. ';
+		if(m?.piece==='q') text+='Ферзь вышел на доску: проверь, не атакован ли он более дешёвой фигурой. ';
+		if(m?.piece==='r') text+='После хода ладьи проверь открытые линии и не оставил ли ты её под ударом. ';
+		text+='Перед следующим ходом проверь шахи, взятия и прямые угрозы соперника.';
+	}
+	$('coach').innerHTML='<strong>Тренер</strong><br>'+escapeHtml(text);
+}
+function pieceName(p){return ({p:'пешку',n:'коня',b:'слона',r:'ладью',q:'ферзя',k:'короля'})[p]||'фигуру';}
+function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function makeExercise(){
+	const game=new Chess(positions[current]);const checks=game.moves({verbose:true}).filter(m=>m.san.includes('+')||m.san.includes('#'));
+	let q;
+	if(game.isCheck()) q='Твой король под шахом. Какой легальный ход убирает шах? Попробуй найти его на доске.';
+	else if(checks.length) q='Посмотри на позицию. Есть ли у тебя шах или взятие, которое стоит рассчитать первым? Проверь варианты на доске.';
+	else q='Перед тем как ходить, найди самую незащищённую фигуру соперника и проверь, можно ли атаковать её без потери материала.';
+	$('exercise').textContent=q;$('exercise').hidden=false;
+}
+$('startBtn').onclick=()=>go(0);$('prevBtn').onclick=()=>go(current-1);$('nextBtn').onclick=()=>go(current+1);$('endBtn').onclick=()=>go(sanMoves.length);
+$('flipBtn').onclick=()=>{flipped=!flipped;renderBoard();};
+$('loadBtn').onclick=()=>loadPgn($('pgn').value.trim());
+$('sampleBtn').onclick=()=>{$('pgn').value=sample;loadPgn(sample);};
+$('fileInput').addEventListener('change',async e=>{const f=e.target.files[0];if(f){const t=await f.text();$('pgn').value=t;loadPgn(t);}});
+$('coachBtn').onclick=explain;$('exerciseBtn').onclick=makeExercise;
+
+let engineWorker=null, engineState='off', analysisRequest=null, engineScore=null, enginePv='';
+let reviewState=null;
+function engineStatus(message){$('engineStatus').textContent=message;}
+function startEngine(){
+ if(engineWorker)return;
+ engineStatus('Запуск Stockfish из локальных файлов…');
+ try{
+  engineWorker=new Worker('./engine-loader.js');
+  engineWorker.onmessage=event=>{
+   const line=String(event.data||'').trim();
+   if(line==='uciok'){engineWorker.postMessage('isready');return;}
+   if(line==='readyok'){
+    engineState='ready';
+    if(analysisRequest) runEngineAnalysis();
+    else engineStatus('Stockfish готов. Нажми «Анализ Stockfish».');
+    return;
+   }
+   if(line.startsWith('info ')){
+    const d=line.match(/\bdepth (\d+)/), cp=line.match(/\bscore cp (-?\d+)/), mate=line.match(/\bscore mate (-?\d+)/), pv=line.match(/\bpv (.+)$/);
+    if(d) $('engineStatus').textContent='Анализ позиции… глубина '+d[1];
+    if(cp)engineScore=Number(cp[1])/100;
+    if(mate)engineScore=Number(mate[1])>0?99:-99;
+    if(pv)enginePv=pv[1];
+    return;
+   }
+   if(line.startsWith('bestmove ')) finishEngineAnalysis(line.split(/\s+/)[1]);
+  };
+  engineWorker.onerror=()=>{engineStatus('Не удалось запустить локальный Stockfish. Проверь, что первичная загрузка завершилась успешно.');$('analyzeBtn').disabled=false;};
+  engineWorker.postMessage('uci');
+  engineState='loading';
+ }catch(e){engineStatus('Ошибка запуска Stockfish: '+e.message);}
+}
+function runEngineAnalysis(){
+ if(!engineWorker||!analysisRequest)return;
+ engineScore=null;enginePv='';
+ const fen=analysisRequest.fen, depth=$('depthSelect').value;
+ engineStatus('Анализ позиции…');$('analyzeBtn').disabled=true;$('engineResult').hidden=false;
+ $('engineResult').innerHTML='<b>Stockfish анализирует позицию…</b><br><span class="muted">Движок работает прямо в браузере.</span>';
+ engineWorker.postMessage('position fen '+fen);
+ engineWorker.postMessage('go depth '+depth);
+}
+function finishEngineAnalysis(bestUci){
+ if(!analysisRequest)return;
+ const req=analysisRequest;analysisRequest=null;
+ if(reviewState && reviewState.active){
+  let whiteScore=engineScore;
+  if(whiteScore!==null && new Chess(req.fen).turn()==='b') whiteScore=-whiteScore;
+  reviewState.scores.push(whiteScore);
+  reviewState.index++;
+  engineStatus('Разбор всей партии: позиция '+reviewState.index+' из '+reviewState.total+'…');
+  if(reviewState.index<reviewState.total){ analysisRequest={fen:positions[reviewState.index]}; runEngineAnalysis(); }
+  else finishFullReview();
+  return;
+ }
+ const game=new Chess(req.fen), turn=game.turn();
+ let bestSan=bestUci;
+ try{
+  if(bestUci && bestUci!=='(none)'){
+   const move={from:bestUci.slice(0,2),to:bestUci.slice(2,4)};
+   if(bestUci.length>4)move.promotion=bestUci[4];
+   bestSan=game.move(move)?.san||bestUci;
+  }
+ }catch(e){}
+ let whiteScore=engineScore;
+ if(whiteScore!==null && turn==='b')whiteScore=-whiteScore;
+ const scoreText=whiteScore===null?'не получена':whiteScore>=98?'мат белым':whiteScore<=-98?'мат чёрным':(whiteScore>0?'+':'')+whiteScore.toFixed(2);
+ const pvMoves=[];
+ try{
+  const pvGame=new Chess(req.fen);
+  for(const uci of enginePv.split(/\s+/).slice(0,8)){
+   if(!uci)continue;
+   const mv={from:uci.slice(0,2),to:uci.slice(2,4)};
+   if(uci.length>4)mv.promotion=uci[4];
+   const played=pvGame.move(mv);if(!played)break;pvMoves.push(played.san);
+  }
+ }catch(e){}
+ $('engineResult').innerHTML='<b>Оценка позиции (с точки зрения белых):</b> '+escapeHtml(scoreText)+'<br><b>Лучший ход:</b> '+escapeHtml(bestSan||'—')+'<br><b>Вариант движка:</b> '+escapeHtml(pvMoves.join(' ')||'нет данных')+'<br><span class="muted">Глубина: '+escapeHtml($('depthSelect').value)+'. Оценка в пешках приблизительная; знак «+» означает преимущество белых.</span>';
+ engineStatus('Анализ завершён.');$('analyzeBtn').disabled=false;
+}
+function analyzeCurrent(){
+ analysisRequest={fen:positions[current]};
+ if(!engineWorker){startEngine();return;}
+ if(engineState==='ready')runEngineAnalysis();
+ else engineStatus('Ожидание запуска Stockfish…');
+}
+$('analyzeBtn').onclick=analyzeCurrent;
+function reviewFullGame(){
+ if(!sanMoves.length){$('engineStatus').textContent='Сначала загрузи партию в формате PGN.';return;}
+ if(reviewState && reviewState.active){reviewState.active=false;reviewState=null;analysisRequest=null;$('reviewBtn').textContent='🔎 Разобрать всю партию';$('engineStatus').textContent='Разбор остановлен.';return;}
+ reviewState={active:true,index:0,total:positions.length,scores:[]};
+ $('reviewBtn').textContent='Остановить разбор';$('reviewResult').hidden=false;$('reviewResult').textContent='Подготовка движка…';
+ analysisRequest={fen:positions[0]};
+ if(!engineWorker) startEngine(); else if(engineState==='ready') runEngineAnalysis(); else engineStatus('Ожидание запуска Stockfish…');
+}
+function finishFullReview(){
+ const state=reviewState;if(!state)return;reviewState=null;$('reviewBtn').textContent='🔎 Разобрать всю партию';
+ const issues=[];let inaccuracies=0,mistakes=0,blunders=0;
+ for(let i=1;i<state.scores.length;i++){
+  const before=state.scores[i-1], after=state.scores[i];if(before===null||after===null)continue;
+  const mover=(i%2===1)?'Белые':'Чёрные';
+  const loss=(mover==='Белые')?before-after:after-before;
+  if(loss<0.3)continue;
+  let label='Неточность';if(loss>=1.5){label='Зевок';blunders++;}else if(loss>=0.8){label='Ошибка';mistakes++;}else inaccuracies++;
+  issues.push({i,mover,label,loss,san:sanMoves[i-1]});
+ }
+ const shown=issues.slice(0,30);
+ let html='<b>Разбор завершён</b><br>Позиций проверено: '+state.scores.length+' из '+positions.length+'.<br><b>Неточности:</b> '+inaccuracies+' · <b>Ошибки:</b> '+mistakes+' · <b>Зевки:</b> '+blunders+'<hr>';
+ if(!shown.length) html+='По выбранным порогам крупных потерь не найдено. Это не гарантия идеальной игры.';
+ else html+='<ol>'+shown.map(x=>'<li><button class="move" data-review-ply="'+x.i+'">Ход '+Math.ceil(x.i/2)+(x.i%2===1?'. ':'... ')+escapeHtml(x.san)+'</button> — <b>'+x.label+'</b> ('+x.loss.toFixed(2)+' пешки, '+x.mover+')</li>').join('')+'</ol>'+(issues.length>30?'<p>Показаны первые 30 найденных моментов.</p>':'')+'<p class="muted">Оценка приблизительная. Глубина: '+escapeHtml($('depthSelect').value)+'.</p>';
+ $('reviewResult').innerHTML=html;$('reviewResult').querySelectorAll('[data-review-ply]').forEach(b=>b.addEventListener('click',()=>go(Number(b.dataset.reviewPly))));engineStatus('Полный разбор завершён.');
+}
+$('reviewBtn').onclick=reviewFullGame;
+renderBoard();
+// Ресурсы приложения уже сохранены локально Android-приложением; service worker не требуется.
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "Chess Coach — шахматный тренер",
+  "short_name": "Chess Coach",
+  "description": "Офлайн-разбор шахматных партий и тренировка со Stockfish",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#101411",
+  "theme_color": "#151b17",
+  "icons": [{"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}
